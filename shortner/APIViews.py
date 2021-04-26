@@ -27,7 +27,7 @@ class DetailView(generics.RetrieveDestroyAPIView):
     queryset = Shorten.objects.all()
     serializer_class = ShortenSerializer
     def get(self,request,**kwargs):
-        ua = request.META.get("HTTP_USER_AGENT")
+        ua = request.META.get("HTTP_USER_AGENT","unknown")
         Tracker.objects.create(
             short_id=self.get_object(),
             ip = find_ip(request),
