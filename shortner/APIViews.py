@@ -1,9 +1,14 @@
 from rest_framework import generics,permissions
 from .models import Shorten,Tracker
-from .serializers import ShortenSerializer,TrackerSerializer
-from .permissions import IsCreatedBy
+from django.urls import reverse_lazy
+from .serializers import (
+    ShortenSerializer,TrackerSerializer,CreateShortenSerializer
+)
+from .permissions import IsCreatedBy,IsCreatedByOrReadOnly
 import re,string,random
 from django.utils import timezone
+from rest_framework import status
+from rest_framework.response import Response
 def find_ip(request):
     x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if x_forwarded_for:
@@ -23,7 +28,7 @@ def generate_shorten_tracker():
     shorten = "".join([random.choice(chars) for _ in range(12)])
     return shorten
 class DetailView(generics.RetrieveDestroyAPIView):
-    permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
+    permission_classes = (IsCreatedByOrReadOnly,)
     queryset = Shorten.objects.all()
     serializer_class = ShortenSerializer
     def get(self,request,**kwargs):
@@ -37,7 +42,23 @@ class DetailView(generics.RetrieveDestroyAPIView):
         )
         return super().get(request,**kwargs)
     
-        
+class CreateView(generics.CreateAPIView):
+    serializer_class = CreateShortenSerializer
+    def create(self,request,*args,**kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid(raise_exception=True):
+            while True:
+                short_id = generate_shorten_tracker()
+                if not Shorten.objects.filter(short_id=short_id).exists():
+                    break
+            print(request.user)
+            serializer.save(short_id=short_id,created_by=request.user)
+            return Response(
+                {
+                    "short_url":f"{request.scheme}://{request.get_host()}{reverse_lazy('shortner:get_short',args=(serializer.instance.short_id,))}"
+                    },
+                    status=status.HTTP_201_CREATED
+                    )
 class TrackerView(generics.ListAPIView):
     permission_classes = (IsCreatedBy,)
     serializer_class = TrackerSerializer
